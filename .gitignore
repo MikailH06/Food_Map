@@ -1,0 +1,25 @@
+# Secrets — the Supabase service-role key grants full database access.
+# Never commit these.
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Local PGlite database (dev only)
+.data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / coverage
+coverage/
+dist/

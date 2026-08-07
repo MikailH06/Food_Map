@@ -1,0 +1,30 @@
+{
+  "name": "food-map",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-user interactive restaurant map for LA County",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch server/index.js",
+    "start": "node server/index.js",
+    "migrate": "node --env-file-if-exists=.env server/db/migrate.js",
+    "seed": "node --env-file-if-exists=.env scripts/seed-osm.js",
+    "test": "node --env-file-if-exists=.env.test --test"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.10",
+    "@supabase/supabase-js": "^2.58.0",
+    "cheerio": "^1.1.2",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "jose": "^6.1.0",
+    "pg": "^8.16.3",
+    "robots-parser": "^3.0.1",
+    "zod": "^4.1.11"
+  }
+}
