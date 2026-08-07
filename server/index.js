@@ -16,7 +16,10 @@ import rateLimit from 'express-rate-limit';
 import { server as serverConfig, rateLimits, validateConfig } from './config.js';
 import * as db from './db/pool.js';
 import { notFoundHandler, errorHandler } from './middleware/errors.js';
+import { attachUser, devAuthEnabled } from './middleware/auth.js';
 import healthRoutes from './routes/health.js';
+import mapRoutes from './routes/maps.js';
+import restaurantRoutes from './routes/restaurants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -81,6 +84,13 @@ export function createApp() {
     })
   );
 
+  // Resolve the caller's identity once, before any route needs it. Routes that
+  // require a user add requireAuth; the rest simply see req.user or null.
+  app.use('/api', attachUser);
+
+  app.use('/api', mapRoutes);
+  app.use('/api', restaurantRoutes);
+
   // Frontend. Static assets are served after the API so a stray file can never
   // shadow an endpoint.
   app.use(express.static(publicDir, { extensions: ['html'] }));
@@ -102,6 +112,14 @@ export async function start() {
   const httpServer = app.listen(serverConfig.port, () => {
     console.log(`[server] listening on http://localhost:${serverConfig.port}`);
     console.log(`[server] environment: ${serverConfig.isProduction ? 'production' : 'development'}`);
+    if (devAuthEnabled()) {
+      console.warn(
+        '[server] DEV AUTH ACTIVE — any request may claim an identity with the\n' +
+          '         X-Dev-User header. This requires both a non-production\n' +
+          '         NODE_ENV and an unset SUPABASE_URL, so it cannot happen in\n' +
+          '         production, but never expose this server publicly as-is.'
+      );
+    }
   });
 
   // Give in-flight requests a chance to finish before dropping the process.
