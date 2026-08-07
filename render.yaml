@@ -1,0 +1,52 @@
+# Render blueprint.
+#
+# Render can read this file and create the service for you, or you can create a
+# Web Service manually in the dashboard with the same settings.
+#
+# The free plan sleeps after 15 minutes idle. The GitHub Actions workflow in
+# .github/workflows/keep-alive.yml prevents that; see the comments there.
+
+services:
+  - type: web
+    name: food-map
+    runtime: node
+    plan: free
+    region: oregon
+
+    buildCommand: npm ci
+    # Migrations run at boot rather than at build time: Render's build step has
+    # no access to the runtime environment group, so DATABASE_URL is not
+    # available there.
+    startCommand: npm run migrate && npm start
+
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Supabase Postgres. Use the TRANSACTION POOLER string (port 6543), not a
+      # direct connection — Render's free plan gets a shared IP and direct
+      # connections exhaust Supabase's limit quickly.
+      # Dashboard -> Project Settings -> Database -> Connection string -> Transaction pooler
+      - key: DATABASE_URL
+        sync: false # set this in the Render dashboard; never commit it
+
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      # SECRET. Bypasses row-level security entirely.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Must include your real site origin or the browser will be blocked by
+      # CORS. Update this to your actual Render URL after the first deploy.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Leave unset to stay entirely free. Setting it switches maps, places and
+      # geocoding to Google with no code change — see README.
+      # - key: GOOGLE_MAPS_API_KEY
+      #   sync: false
