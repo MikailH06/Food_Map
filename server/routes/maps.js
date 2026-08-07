@@ -13,6 +13,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { validateBody, validateParams } from '../middleware/validate.js';
 import { notFound, forbidden, conflict, badRequest } from '../middleware/errors.js';
 import { getMapRestaurants } from '../services/search.js';
+import { geocode } from '../providers/geocoding/index.js';
 import { geography } from '../config.js';
 
 const router = Router();
@@ -151,6 +152,133 @@ router.delete('/maps/:id', requireAuth, validateParams(mapIdParams), async (req,
   await db.query('DELETE FROM maps WHERE id = $1', [req.params.id]);
   res.status(204).end();
 });
+
+/**
+ * Move a map's centre by ADDRESS.
+ *
+ * The user types "3014 W Olympic Blvd, Los Angeles" and we resolve it. No
+ * latitude or longitude ever appears in the interface — coordinates are an
+ * internal detail, which is the whole point of the geocoding providers.
+ */
+router.patch(
+  '/maps/:id/center',
+  requireAuth,
+  validateParams(mapIdParams),
+  validateBody(
+    z.object({
+      address: z.string().trim().min(3, 'Enter an address or place name').max(300),
+      zoom: z.number().int().min(geography.minZoom).max(geography.maxZoom).optional(),
+    })
+  ),
+  async (req, res) => {
+    await loadMap(req.params.id, req.user, { forWriting: true });
+
+    const location = await geocode(req.body.address);
+    if (!location) {
+      throw badRequest(
+        `Could not find "${req.body.address}". Try adding a city, or a nearby street address.`
+      );
+    }
+
+    // Refuse a location outside the area we actually have restaurants for,
+    // rather than dropping the user on an empty map.
+    const [[south, west], [north, east]] = geography.bounds;
+    const inArea =
+      location.lat >= south && location.lat <= north && location.lng >= west && location.lng <= east;
+
+    if (!inArea) {
+      throw badRequest(
+        `"${location.formattedAddress}" is outside the area this map covers (LA County).`
+      );
+    }
+
+    const { rows } = await db.query(
+      `UPDATE maps
+       SET center_address = $2, center_lat = $3, center_lng = $4, zoom = COALESCE($5, zoom)
+       WHERE id = $1 RETURNING *`,
+      [
+        req.params.id,
+        location.formattedAddress,
+        location.lat,
+        location.lng,
+        req.body.zoom ?? null,
+      ]
+    );
+
+    res.json({
+      map: rows[0],
+      // Tell the client which provider answered and how confident it was, so a
+      // vague match can be flagged rather than silently accepted.
+      geocoding: { provider: location.provider, confidence: location.confidence },
+    });
+  }
+);
+
+/**
+ * Add a restaurant that is not in the catalog, by ADDRESS.
+ *
+ * OpenStreetMap has ~13k LA County restaurants against 30k+ real food
+ * businesses, so this path is not an edge case — it is how the gap gets filled.
+ */
+router.post(
+  '/maps/:id/restaurants/custom',
+  requireAuth,
+  validateParams(mapIdParams),
+  validateBody(
+    z.object({
+      name: z.string().trim().min(1, 'Enter the restaurant name').max(200),
+      address: z.string().trim().min(3, 'Enter the address').max(300),
+      cuisines: z.array(z.string().trim().min(1).max(50)).max(10).optional().default([]),
+      phone: z.string().trim().max(50).optional(),
+      website: z.string().trim().url('Must be a full URL, e.g. https://example.com').max(500).optional(),
+      notes: z.string().max(2000).optional(),
+    })
+  ),
+  async (req, res) => {
+    await loadMap(req.params.id, req.user, { forWriting: true });
+
+    const location = await geocode(req.body.address);
+    if (!location) {
+      throw badRequest(
+        `Could not find "${req.body.address}". Check the street number and city.`
+      );
+    }
+
+    const created = await db.transaction(async (tx) => {
+      const inserted = await tx.query(
+        `INSERT INTO restaurants
+           (source, name, address_line1, lat, lng, cuisines, phone, website, created_by)
+         VALUES ('user', $1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          req.body.name,
+          location.formattedAddress,
+          location.lat,
+          location.lng,
+          req.body.cuisines,
+          req.body.phone ?? null,
+          req.body.website ?? null,
+          req.user.id,
+        ]
+      );
+
+      const restaurant = inserted.rows[0];
+
+      await tx.query(
+        'INSERT INTO map_restaurants (map_id, restaurant_id, notes) VALUES ($1, $2, $3)',
+        [req.params.id, restaurant.id, req.body.notes ?? null]
+      );
+
+      if (restaurant.website) {
+        await tx.query('INSERT INTO enrichment_jobs (restaurant_id) VALUES ($1)', [restaurant.id]);
+      }
+
+      return restaurant;
+    });
+
+    res.status(201).json({ restaurant: created });
+  }
+);
 
 /**
  * Quick-add: pin an existing catalog restaurant to a map.

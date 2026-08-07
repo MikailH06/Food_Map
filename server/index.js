@@ -20,6 +20,7 @@ import { attachUser, devAuthEnabled } from './middleware/auth.js';
 import healthRoutes from './routes/health.js';
 import mapRoutes from './routes/maps.js';
 import restaurantRoutes from './routes/restaurants.js';
+import { startWorker, stopWorker } from './services/enrichment/worker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, '..', 'public');
@@ -108,6 +109,8 @@ export async function start() {
   await db.init();
   console.log(`[db] connected via ${db.kind()}`);
 
+  startWorker();
+
   const app = createApp();
   const httpServer = app.listen(serverConfig.port, () => {
     console.log(`[server] listening on http://localhost:${serverConfig.port}`);
@@ -128,6 +131,7 @@ export async function start() {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[server] ${signal} received, shutting down`);
+    stopWorker();
 
     httpServer.close(async () => {
       await db.close();
