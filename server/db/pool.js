@@ -59,8 +59,14 @@ async function initPostgres() {
 async function initPglite() {
   const { PGlite } = await import('@electric-sql/pglite');
   const { pg_trgm } = await import('@electric-sql/pglite/contrib/pg_trgm');
+  const { mkdir } = await import('node:fs/promises');
 
   const dir = database.pgliteDir;
+
+  // PGlite creates its own data directory but not any missing parents.
+  if (dir !== 'memory://') {
+    await mkdir(dir, { recursive: true });
+  }
   // Note the two call shapes: passing `undefined` as the first positional
   // argument does NOT select an in-memory database, it breaks extension
   // loading. An in-memory database is requested by omitting the path entirely.
