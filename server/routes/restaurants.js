@@ -8,6 +8,8 @@ import rateLimit from 'express-rate-limit';
 import { validateQuery, validateParams } from '../middleware/validate.js';
 import { notFound } from '../middleware/errors.js';
 import { searchRestaurants, getRestaurantById } from '../services/search.js';
+import { resolveRestaurant, resolveMany } from '../services/resolver.js';
+import { getPrimaryPhotos, getViewerRatings } from '../services/storage.js';
 import { search as searchConfig, geography, rateLimits } from '../config.js';
 
 const router = Router();
@@ -59,13 +61,36 @@ router.get('/restaurants/search', searchLimiter, validateQuery(searchQuery), asy
     excludeMapId,
   });
 
-  res.json({ count: results.length, restaurants: results });
+  const ids = results.map((r) => r.id);
+  const [photos, viewerRatings] = await Promise.all([
+    getPrimaryPhotos(ids),
+    getViewerRatings(req.user?.id ?? null, ids),
+  ]);
+
+  res.json({
+    count: results.length,
+    restaurants: resolveMany(results, {
+      photosByRestaurant: photos,
+      ratingsByRestaurant: viewerRatings,
+    }),
+  });
 });
 
 router.get('/restaurants/:id', validateParams(z.object({ id: uuid })), async (req, res) => {
-  const restaurant = await getRestaurantById(req.params.id);
-  if (!restaurant) throw notFound('No such restaurant');
-  res.json({ restaurant });
+  const row = await getRestaurantById(req.params.id);
+  if (!row) throw notFound('No such restaurant');
+
+  const [photos, viewerRatings] = await Promise.all([
+    getPrimaryPhotos([row.id]),
+    getViewerRatings(req.user?.id ?? null, [row.id]),
+  ]);
+
+  res.json({
+    restaurant: resolveRestaurant(row, {
+      userPhotoUrl: photos.get(row.id) ?? null,
+      viewerRating: viewerRatings.get(row.id) ?? null,
+    }),
+  });
 });
 
 export default router;

@@ -13,6 +13,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { validateBody, validateParams } from '../middleware/validate.js';
 import { notFound, forbidden, conflict, badRequest } from '../middleware/errors.js';
 import { getMapRestaurants } from '../services/search.js';
+import { resolveMany } from '../services/resolver.js';
+import { getPrimaryPhotos, getViewerRatings } from '../services/storage.js';
 import { geocode } from '../providers/geocoding/index.js';
 import { geography } from '../config.js';
 
@@ -101,12 +103,25 @@ router.post(
   }
 );
 
-/** A map and every pin on it. */
+/** A map and every pin on it, resolved for display. */
 router.get('/maps/:id', validateParams(mapIdParams), async (req, res) => {
   const { map, isOwner } = await loadMap(req.params.id, req.user);
-  const restaurants = await getMapRestaurants(map.id);
+  const rows = await getMapRestaurants(map.id);
 
-  res.json({ map, isOwner, restaurants });
+  const ids = rows.map((r) => r.id);
+  const [photos, viewerRatings] = await Promise.all([
+    getPrimaryPhotos(ids),
+    getViewerRatings(req.user?.id ?? null, ids),
+  ]);
+
+  res.json({
+    map,
+    isOwner,
+    restaurants: resolveMany(rows, {
+      photosByRestaurant: photos,
+      ratingsByRestaurant: viewerRatings,
+    }),
+  });
 });
 
 router.patch(

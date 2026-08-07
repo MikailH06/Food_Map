@@ -126,9 +126,101 @@ test('proximity ranking prefers the nearer of two equally-named places', async (
 
   assert.equal(res.body.count, 2);
   assert.ok(
-    res.body.restaurants[0].distance_meters < res.body.restaurants[1].distance_meters,
+    res.body.restaurants[0].meta.distanceMeters < res.body.restaurants[1].meta.distanceMeters,
     'the closer one should rank first'
   );
+});
+
+test('search results come back resolved, not as raw database rows', async () => {
+  await seedRestaurant({ name: 'Shape Check' });
+
+  const res = await api('/api/restaurants/search?q=Shape Check');
+  const restaurant = res.body.restaurants[0];
+
+  // The resolved shape is what the frontend is written against.
+  assert.equal(restaurant.rating, null, 'unrated resolves to null, not 0');
+  assert.equal(restaurant.address.city, 'Los Angeles');
+  assert.equal(typeof restaurant.position.lat, 'number');
+  assert.ok(!('ext_rating' in restaurant), 'raw enrichment columns should not leak out');
+});
+
+test('a rating from one user shows as the community average to another', async () => {
+  await api('/api/me', { user: ALICE });
+  await api('/api/me', { user: BOB });
+  const restaurantId = await seedRestaurant();
+
+  const rated = await api(`/api/restaurants/${restaurantId}/rating`, {
+    method: 'PUT',
+    user: ALICE,
+    body: { stars: 5, priceLevel: 2, comment: 'Worth the drive' },
+  });
+  assert.equal(rated.status, 200);
+
+  // Alice sees her own rating echoed back alongside the average.
+  const asAlice = await api(`/api/restaurants/${restaurantId}`, { user: ALICE });
+  assert.equal(asAlice.body.restaurant.yourRating.stars, 5);
+  assert.equal(asAlice.body.restaurant.rating.value, 5);
+  assert.equal(asAlice.body.restaurant.rating.source, 'community');
+  assert.equal(asAlice.body.restaurant.price.symbols, '$$');
+
+  // Bob sees the shared average but no rating of his own.
+  const asBob = await api(`/api/restaurants/${restaurantId}`, { user: BOB });
+  assert.equal(asBob.body.restaurant.rating.value, 5);
+  assert.equal(asBob.body.restaurant.yourRating, null);
+});
+
+test('two users ratings average together', async () => {
+  await api('/api/me', { user: ALICE });
+  await api('/api/me', { user: BOB });
+  const restaurantId = await seedRestaurant();
+
+  await api(`/api/restaurants/${restaurantId}/rating`, { method: 'PUT', user: ALICE, body: { stars: 5 } });
+  await api(`/api/restaurants/${restaurantId}/rating`, { method: 'PUT', user: BOB, body: { stars: 3 } });
+
+  const res = await api(`/api/restaurants/${restaurantId}`);
+  assert.equal(res.body.restaurant.rating.value, 4);
+  assert.equal(res.body.restaurant.rating.count, 2);
+});
+
+test('re-rating replaces rather than adds', async () => {
+  await api('/api/me', { user: ALICE });
+  const restaurantId = await seedRestaurant();
+
+  await api(`/api/restaurants/${restaurantId}/rating`, { method: 'PUT', user: ALICE, body: { stars: 2 } });
+  await api(`/api/restaurants/${restaurantId}/rating`, { method: 'PUT', user: ALICE, body: { stars: 5 } });
+
+  const res = await api(`/api/restaurants/${restaurantId}`);
+  assert.equal(res.body.restaurant.rating.value, 5);
+  assert.equal(res.body.restaurant.rating.count, 1, 'should replace, not accumulate');
+});
+
+test('rejects a star rating outside the allowed range', async () => {
+  await api('/api/me', { user: ALICE });
+  const restaurantId = await seedRestaurant();
+
+  const res = await api(`/api/restaurants/${restaurantId}/rating`, {
+    method: 'PUT',
+    user: ALICE,
+    body: { stars: 7 },
+  });
+
+  assert.equal(res.status, 400);
+  assert.ok(res.body.error.details.fields.stars);
+});
+
+test('removing a rating drops it from the average', async () => {
+  await api('/api/me', { user: ALICE });
+  const restaurantId = await seedRestaurant();
+
+  await api(`/api/restaurants/${restaurantId}/rating`, { method: 'PUT', user: ALICE, body: { stars: 5 } });
+  const removed = await api(`/api/restaurants/${restaurantId}/rating`, {
+    method: 'DELETE',
+    user: ALICE,
+  });
+  assert.equal(removed.status, 204);
+
+  const res = await api(`/api/restaurants/${restaurantId}`);
+  assert.equal(res.body.restaurant.rating, null);
 });
 
 test('quick-add pins a restaurant and it survives a fresh request', async () => {

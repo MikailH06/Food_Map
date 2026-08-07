@@ -20,6 +20,8 @@ import { attachUser, devAuthEnabled } from './middleware/auth.js';
 import healthRoutes from './routes/health.js';
 import mapRoutes from './routes/maps.js';
 import restaurantRoutes from './routes/restaurants.js';
+import ratingRoutes from './routes/ratings.js';
+import photoRoutes from './routes/photos.js';
 import { startWorker, stopWorker } from './services/enrichment/worker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -91,6 +93,8 @@ export function createApp() {
 
   app.use('/api', mapRoutes);
   app.use('/api', restaurantRoutes);
+  app.use('/api', ratingRoutes);
+  app.use('/api', photoRoutes);
 
   // Frontend. Static assets are served after the API so a stray file can never
   // shadow an endpoint.
