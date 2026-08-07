@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Food Map — Your LA Restaurant Map</title>
+    <meta name="description" content="Build your own map of Los Angeles restaurants." />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+    <script
+      src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
+      defer
+    ></script>
+    <script type="module" src="/js/main.js"></script>
+  </head>
+
+  <body>
+    <!-- Sign-in screen. Replaced by the app once authenticated. -->
+    <div id="auth-screen" class="auth-screen" hidden>
+      <div class="auth-card">
+        <h1 class="auth-title">Food Map</h1>
+        <p class="auth-subtitle">Build your own map of LA restaurants.</p>
+
+        <div id="auth-error" class="alert alert-error" hidden></div>
+        <div id="auth-notice" class="alert alert-info" hidden></div>
+
+        <form id="auth-form" class="auth-form">
+          <label class="field">
+            <span class="field-label">Email</span>
+            <input type="email" id="auth-email" autocomplete="email" required />
+          </label>
+
+          <label class="field">
+            <span class="field-label">Password</span>
+            <input
+              type="password"
+              id="auth-password"
+              autocomplete="current-password"
+              minlength="8"
+              required
+            />
+          </label>
+
+          <button type="submit" id="auth-submit" class="btn btn-primary btn-block">Sign in</button>
+        </form>
+
+        <p class="auth-switch">
+          <span id="auth-switch-text">New here?</span>
+          <button type="button" id="auth-switch-btn" class="btn-link">Create an account</button>
+        </p>
+      </div>
+    </div>
+
+    <!-- The app. -->
+    <div id="app" class="app" hidden>
+      <header class="topbar">
+        <h1 class="brand">Food Map</h1>
+
+        <div class="topbar-center">
+          <form id="center-form" class="center-form">
+            <input
+              type="text"
+              id="center-input"
+              class="center-input"
+              placeholder="Center the map on an address or neighborhood…"
+              aria-label="Center the map on an address"
+            />
+            <button type="submit" class="btn btn-secondary">Go</button>
+          </form>
+        </div>
+
+        <div class="topbar-right">
+          <select id="map-select" class="map-select" aria-label="Choose a map"></select>
+          <button type="button" id="new-map-btn" class="btn btn-secondary" title="Create a new map">
+            + Map
+          </button>
+          <button type="button" id="sign-out-btn" class="btn btn-ghost">Sign out</button>
+        </div>
+      </header>
+
+      <div id="banner" class="banner" hidden></div>
+
+      <main class="layout">
+        <aside class="sidebar">
+          <div class="sidebar-search">
+            <input
+              type="search"
+              id="search-input"
+              class="search-input"
+              placeholder="Search restaurants to add…"
+              aria-label="Search restaurants"
+              autocomplete="off"
+            />
+            <div class="search-hint">
+              Type a name or cuisine, then press Add. Typos are fine.
+            </div>
+          </div>
+
+          <div id="search-results" class="results" hidden></div>
+
+          <div class="sidebar-section">
+            <div class="sidebar-header">
+              <h2 id="pins-heading">On this map</h2>
+              <span id="pin-count" class="badge">0</span>
+            </div>
+            <div id="pin-list" class="results"></div>
+          </div>
+
+          <div class="sidebar-footer">
+            <button type="button" id="add-custom-btn" class="btn btn-secondary btn-block">
+              Can't find it? Add manually
+            </button>
+          </div>
+        </aside>
+
+        <div class="map-wrap">
+          <div id="map" class="map"></div>
+          <div id="map-loading" class="map-loading">Loading map…</div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Detail panel for a selected restaurant. -->
+    <div id="detail-backdrop" class="backdrop" hidden></div>
+    <section id="detail" class="detail" hidden aria-label="Restaurant details"></section>
+
+    <!-- Manual-add dialog. OpenStreetMap covers ~13k of LA County's 30k+ food
+         businesses, so this path fills a real gap rather than being an edge case. -->
+    <dialog id="custom-dialog" class="dialog">
+      <form method="dialog" id="custom-form" class="dialog-form">
+        <h2>Add a restaurant</h2>
+        <p class="dialog-note">
+          Enter the address — we'll find the location for you. No coordinates needed.
+        </p>
+
+        <div id="custom-error" class="alert alert-error" hidden></div>
+
+        <label class="field">
+          <span class="field-label">Name *</span>
+          <input type="text" id="custom-name" required maxlength="200" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Address *</span>
+          <input
+            type="text"
+            id="custom-address"
+            required
+            maxlength="300"
+            placeholder="3014 W Olympic Blvd, Los Angeles"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Cuisine</span>
+          <input type="text" id="custom-cuisines" placeholder="mexican, oaxacan" maxlength="200" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Website</span>
+          <input type="url" id="custom-website" placeholder="https://…" maxlength="500" />
+          <span class="field-hint">
+            If you add one, we'll try to pull a photo and description from it.
+          </span>
+        </label>
+
+        <div class="dialog-actions">
+          <button type="button" id="custom-cancel" class="btn btn-ghost">Cancel</button>
+          <button type="submit" id="custom-submit" class="btn btn-primary">Add to map</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" hidden></div>
+  </body>
+</html>

@@ -52,11 +52,37 @@ export async function geocode(address) {
   const lat = match.coordinates?.y;
   if (typeof lat !== 'number' || typeof lng !== 'number') return null;
 
+  const formatted = match.matchedAddress ?? address;
+
   return {
     lat,
     lng,
-    formattedAddress: match.matchedAddress ?? address,
+    formattedAddress: formatted,
+    components: splitAddress(formatted),
     provider: name,
     confidence: 'exact',
+  };
+}
+
+/**
+ * Split a Census matched address into parts.
+ *
+ * Census returns a predictable comma-separated shape:
+ *   "3014 W OLYMPIC BLVD, LOS ANGELES, CA, 90006"
+ *
+ * Returning components rather than one string matters: storing the whole
+ * formatted address in address_line1 and then re-appending the city and state
+ * for display produces "…, LOS ANGELES, CA, 90006, CA".
+ */
+export function splitAddress(formatted) {
+  const parts = formatted.split(',').map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const [line1, city, state, postalCode] = parts;
+  return {
+    line1: line1 ?? null,
+    city: city ?? null,
+    state: state ?? null,
+    postalCode: postalCode ?? null,
   };
 }

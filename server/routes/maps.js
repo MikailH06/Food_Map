@@ -259,15 +259,30 @@ router.post(
       );
     }
 
+    // Prefer structured components. Without them the whole formatted address
+    // would land in address_line1 and be redisplayed as
+    // "3014 W OLYMPIC BLVD, LOS ANGELES, CA, 90006, CA" once the city and
+    // state were appended again.
+    const parts = location.components ?? {
+      line1: location.formattedAddress,
+      city: null,
+      state: null,
+      postalCode: null,
+    };
+
     const created = await db.transaction(async (tx) => {
       const inserted = await tx.query(
         `INSERT INTO restaurants
-           (source, name, address_line1, lat, lng, cuisines, phone, website, created_by)
-         VALUES ('user', $1, $2, $3, $4, $5, $6, $7, $8)
+           (source, name, address_line1, city, state, postal_code,
+            lat, lng, cuisines, phone, website, created_by)
+         VALUES ('user', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           req.body.name,
-          location.formattedAddress,
+          parts.line1,
+          parts.city,
+          parts.state,
+          parts.postalCode,
           location.lat,
           location.lng,
           req.body.cuisines,

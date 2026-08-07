@@ -81,10 +81,23 @@ export async function geocode(address) {
     const lng = Number.parseFloat(match.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
+    // addressdetails=1 gives structured parts, so callers do not have to store
+    // the whole display_name in a street-address field.
+    const a = match.address ?? {};
+    const street = [a.house_number, a.road].filter(Boolean).join(' ') || null;
+
     return {
       lat,
       lng,
       formattedAddress: match.display_name ?? address,
+      components: street
+        ? {
+            line1: street,
+            city: a.city ?? a.town ?? a.village ?? a.suburb ?? null,
+            state: a.state ?? null,
+            postalCode: a.postcode ?? null,
+          }
+        : null,
       provider: name,
       // Nominatim happily returns a whole city for a vague query, so only a
       // building-level match counts as exact.
