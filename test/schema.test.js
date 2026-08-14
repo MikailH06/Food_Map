@@ -217,3 +217,35 @@ test('rejects impossible coordinates', async () => {
     'latitude above 90 is not a place'
   );
 });
+
+test('row-level security is enabled on every application table', async () => {
+  // Guards the fix in migration 002. The Supabase publishable key reaches the
+  // browser by design, and it can call Supabase's auto-generated REST API
+  // directly — so a table left without RLS is readable and writable by anyone,
+  // bypassing this app's API entirely.
+  const { rows } = await db.query(`
+    SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+    ORDER BY c.relname
+  `);
+
+  const unprotected = rows.filter((r) => !r.rls_enabled).map((r) => r.table_name);
+  assert.deepEqual(unprotected, [], `these tables have RLS off: ${unprotected.join(', ')}`);
+});
+
+test('the server still reads and writes despite RLS, because it owns the tables', async () => {
+  // RLS with no policies denies the anon role everything. The server connects
+  // as the table owner, which bypasses RLS — if that ever stopped being true,
+  // every query in the app would start returning zero rows.
+  const user = await makeProfile();
+  const restaurant = await makeRestaurant({ name: 'Owner Bypass Check' });
+  await db.query('INSERT INTO ratings (user_id, restaurant_id, stars) VALUES ($1,$2,5)', [
+    user,
+    restaurant,
+  ]);
+
+  const { rows } = await db.query('SELECT count(*)::int AS c FROM ratings');
+  assert.equal(rows[0].c, 1, 'owner must still see its own rows with RLS enabled');
+});

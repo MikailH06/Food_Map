@@ -114,6 +114,10 @@ call to a tier with a much smaller free allowance.
 
 ## Deploying
 
+> **[DEPLOYMENT.md](DEPLOYMENT.md) is the click-by-click walkthrough** — start
+> there if this is your first deploy. About 40 minutes. What follows is the
+> condensed version for reference.
+
 ### 1. Supabase (database, auth, photo storage)
 
 1. Create a project at [supabase.com](https://supabase.com) — free, no card.
