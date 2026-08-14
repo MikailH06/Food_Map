@@ -117,13 +117,59 @@ call to a tier with a much smaller free allowance.
 ### 1. Supabase (database, auth, photo storage)
 
 1. Create a project at [supabase.com](https://supabase.com) — free, no card.
+   **Leave "Automatically expose new tables" unchecked.** Nothing here reaches
+   the database through Supabase's Data API, so there is no reason to expose it
+   — see *Locking down database access* below, which is not optional.
 2. **Project Settings → Database → Connection string → Transaction pooler.**
    Copy it; that is `DATABASE_URL`. Use the pooler (port 6543), not a direct
    connection.
 3. **Project Settings → API** gives you `SUPABASE_URL`, `SUPABASE_ANON_KEY` and
    `SUPABASE_SERVICE_ROLE_KEY`.
-4. **Storage → New bucket** named `restaurant-photos`, marked public.
+4. **Storage → New bucket** named `restaurant-photos`, marked public, then add
+   the policies below.
 5. **Authentication → Providers → Email** — enable it.
+
+#### Locking down database access
+
+The anon key is served to every browser by `GET /api/config` — it has to be, for
+sign-in to work. That key can call Supabase's auto-generated REST API directly
+at `https://<ref>.supabase.co/rest/v1/<table>`. **Without row-level security,
+anyone could read and write `maps`, `ratings` and `restaurants` from a browser
+console, bypassing this API and every ownership check in it.**
+
+Enable RLS on every table in `public`. Supabase's dashboard flags any table
+missing it. You need **no policies at all** — with RLS on and no policy, the
+anon role is denied everything, which is correct because nothing legitimate uses
+that path.
+
+This does not affect the server: it connects as the table owner via
+`DATABASE_URL`, and owners bypass RLS.
+
+#### Storage policies
+
+These are required — without them, photo uploads fail silently. Uploads go from
+the browser straight to Supabase, so the rules live in the database. Run this in
+the SQL Editor:
+
+```sql
+create policy "Users upload to their own folder"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'restaurant-photos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "Users delete their own photos"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'restaurant-photos'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+```
+
+The first-path-segment check mirrors what `server/routes/photos.js` enforces
+server-side, so the two layers agree on `<userId>/<restaurantId>/<filename>`. A
+public bucket serves reads through its public URL without a select policy.
 
 ### 2. Render (the Node server)
 
