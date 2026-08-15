@@ -157,14 +157,37 @@ OpenStreetMap and takes a couple of minutes.
 
 ### 2.1 Point your local copy at Supabase
 
-In the project folder, create a file named `.env`:
+You are creating **one file** here. Nothing new to download, no folder to make.
+
+The project folder is wherever you cloned this repository — the folder
+containing `package.json`, `server/` and `public/`. On the machine this was
+built on that is `D:\cooki\Downloads\Food_Map`.
+
+Inside that folder, create a file named exactly **`.env`** — leading dot, no
+extension. Put one line in it:
 
 ```
 DATABASE_URL=postgresql://postgres.abcdefghijkl:yourpassword@aws-1-us-west-1.pooler.supabase.com:6543/postgres
 ```
 
-Use your real string from step 1.2. `.env` is gitignored, so it will not be
-committed.
+Use your real string from step 1.2, all on one line.
+
+**Creating a dotfile on Windows.** File Explorer resists filenames that begin
+with a dot. Easiest ways round it:
+
+- **VS Code:** open the project folder, then right-click in the file list →
+  **New File** → type `.env`.
+- **Terminal**, from inside the project folder:
+
+  ```bash
+  printf 'DATABASE_URL=\n' > .env && notepad .env
+  ```
+
+- **Notepad:** File → Save As, set *Save as type* to **All Files**, and put the
+  name in quotes: `".env"`.
+
+`.env` is listed in `.gitignore`, so your password is never committed. Confirm
+with `git check-ignore -v .env` — it should print a match.
 
 ### 2.2 Create the tables
 
