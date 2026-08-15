@@ -11,6 +11,46 @@ keep-alive needs the URL Render gives you.
 
 ---
 
+## How to read this guide
+
+Each step happens in one of two places, and the guide marks which:
+
+**🌐 In your browser** — clicking around the Supabase, Render or GitHub
+dashboards.
+
+**⌨️ In a terminal** — typing a command on your own computer. Anything shown in
+a box like this is a command to **type or paste into a terminal and press
+Enter**:
+
+```bash
+npm run migrate
+```
+
+It is *not* a name to type into a dashboard, and not a file or table to create.
+`npm` is a program installed alongside Node; `npm run migrate` tells it to run
+this project's migration script, which creates the database tables for you.
+
+### Opening a terminal in the project folder
+
+Any one of these works:
+
+- **File Explorer:** open the project folder, click the address bar, type
+  `powershell`, press Enter.
+- **File Explorer:** hold Shift, right-click empty space in the folder →
+  **Open PowerShell window here** / **Open in Terminal**.
+- **VS Code:** open the project folder, then **Terminal → New Terminal**.
+
+Check you are in the right place by running:
+
+```bash
+npm --version
+```
+
+If that prints a version number you are set. If it says "not recognized",
+install Node from [nodejs.org](https://nodejs.org) and reopen the terminal.
+
+---
+
 ## Before you start
 
 You need:
@@ -37,7 +77,7 @@ Those six values, so you know what you are hunting for:
 
 ---
 
-## Part 1 — Supabase
+## Part 1 — Supabase  🌐 browser
 
 ### 1.1 Create the project
 
@@ -150,7 +190,7 @@ what `server/routes/photos.js` enforces server-side.
 
 ---
 
-## Part 2 — Load the database
+## Part 2 — Load the database  ⌨️ terminal
 
 Run this from your computer, not Render. The seed pulls ~13,000 restaurants from
 OpenStreetMap and takes a couple of minutes.
@@ -191,6 +231,10 @@ with `git check-ignore -v .env` — it should print a match.
 
 ### 2.2 Create the tables
 
+You do **not** create these by hand in the Supabase Table Editor. The two
+commands below make all eight tables for you. Run them in a terminal opened in
+the project folder.
+
 ```bash
 npm install
 ```
@@ -208,7 +252,9 @@ Expected output:
 ```
 
 Check it worked: **Table Editor** in Supabase should now list `restaurants`,
-`maps`, `ratings` and the rest.
+`maps`, `ratings` and the rest. **They will all be empty** — that is correct at
+this point. Only `schema_migrations` has rows, because it records which
+migrations have run. Step 2.3 is what fills `restaurants`.
 
 ### 2.3 Load the restaurants
 
@@ -227,12 +273,21 @@ This queries OpenStreetMap, then writes in batches. Expect:
 
 Roughly 12 MB, against Supabase's 500 MB free limit.
 
-> If Overpass returns a 429 or 504, it is busy. Wait a minute and re-run — the
-> importer is idempotent, so re-running is always safe.
+> **If Overpass returns a 429 or 504**, its free public server is overloaded —
+> this is common and not a problem with your setup. Wait a few minutes and
+> re-run; the importer is idempotent, so re-running is always safe.
+>
+> To avoid repeated waits, save the response the first time it succeeds and
+> reuse it:
+>
+> ```bash
+> npm run seed -- --save la-osm.json
+> npm run seed -- --file la-osm.json
+> ```
 
 ---
 
-## Part 3 — Render
+## Part 3 — Render  🌐 browser
 
 ### 3.1 Create the service
 
@@ -306,7 +361,7 @@ Visit `https://your-url.onrender.com/health`. You want:
 
 ---
 
-## Part 4 — Keep the site awake
+## Part 4 — Keep the site awake  🌐 browser
 
 **Do not skip this.** Two separate timers will take your site down:
 
@@ -329,7 +384,7 @@ Visit `https://your-url.onrender.com/health`. You want:
 
 ---
 
-## Part 5 — Confirm it actually works
+## Part 5 — Confirm it actually works  🌐 browser
 
 Open your Render URL and walk through this:
 
