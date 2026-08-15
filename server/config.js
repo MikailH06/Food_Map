@@ -68,8 +68,52 @@ export const database = {
 // Supabase (auth + file storage)
 // ---------------------------------------------------------------------------
 
+/**
+ * Reduce a Supabase URL to its bare project origin.
+ *
+ * The dashboard shows several URLs for one project, and it is easy to copy the
+ * Data API endpoint (`https://<ref>.supabase.co/rest/v1/`) instead of the
+ * Project URL. The code appends its own paths — `/auth/v1/...`,
+ * `/storage/v1/...` — so anything beyond the origin produces broken requests,
+ * and even a bare trailing slash yields a double slash that breaks JWT issuer
+ * matching.
+ *
+ * The intent is unambiguous in every one of those cases, so normalise rather
+ * than fail a deploy over a paste error. Genuinely unusable values are still
+ * rejected by validateConfig().
+ *
+ * @param {string|null|undefined} raw
+ * @returns {{url: string|null, corrected: boolean}}
+ */
+export function normalizeSupabaseUrl(raw) {
+  if (!raw) return { url: null, corrected: false };
+
+  const trimmed = String(raw).trim();
+  if (!trimmed) return { url: null, corrected: false };
+
+  try {
+    const parsed = new URL(trimmed);
+    const origin = `${parsed.protocol}//${parsed.host}`;
+    return { url: origin, corrected: origin !== trimmed.replace(/\/+$/, '') || trimmed !== origin };
+  } catch {
+    // Not parseable as a URL at all — hand it back untouched so validation can
+    // report the actual value the user set.
+    return { url: trimmed, corrected: false };
+  }
+}
+
+const normalizedSupabase = normalizeSupabaseUrl(env.SUPABASE_URL);
+
+if (normalizedSupabase.corrected) {
+  console.warn(
+    `[config] SUPABASE_URL was "${env.SUPABASE_URL}" — using "${normalizedSupabase.url}".\n` +
+      '         Only the project origin is needed; the code adds /auth/v1 and\n' +
+      '         /storage/v1 itself. Update the variable to silence this.'
+  );
+}
+
 export const supabase = {
-  url: env.SUPABASE_URL ?? null,
+  url: normalizedSupabase.url,
   // Safe to expose to the browser — it only permits what row-level security allows.
   anonKey: env.SUPABASE_ANON_KEY ?? null,
   // NEVER expose this. Full database access, bypasses row-level security.
@@ -298,8 +342,15 @@ export function validateConfig({ requireSupabase = server.isProduction } = {}) {
     if (!database.url) problems.push('DATABASE_URL is required in production');
   }
 
-  if (supabase.url && !/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(supabase.url)) {
-    problems.push(`SUPABASE_URL looks malformed: "${supabase.url}"`);
+  if (supabase.url && !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(supabase.url)) {
+    problems.push(
+      `SUPABASE_URL is not a Supabase project URL.\n` +
+        `      got:      ${env.SUPABASE_URL}\n` +
+        `      expected: https://<your-project-ref>.supabase.co\n` +
+        `      Find it in the Supabase dashboard under Settings -> API,\n` +
+        `      labelled "Project URL". Do not use the Data API endpoint that\n` +
+        `      ends in /rest/v1/.`
+    );
   }
 
   if (server.isProduction && server.corsOrigins.some((o) => o.includes('localhost'))) {

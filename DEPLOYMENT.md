@@ -132,8 +132,21 @@ Those six values, so you know what you are hunting for:
 3. Copy or create a **Secret key** (`sb_secret_…`) → this is your
    `SUPABASE_SERVICE_ROLE_KEY`.
    You may need to click **Create new secret key**. It is shown once — save it.
-4. **Settings → API** (or **Data API**) → copy the **Project URL**
-   (`https://abcdefgh.supabase.co`) → `SUPABASE_URL`.
+4. **Settings → API** (or **Data API**) → copy the **Project URL** →
+   `SUPABASE_URL`.
+
+   It must be **only the origin**, with nothing after `.co`:
+
+   | | |
+   |---|---|
+   | ✅ correct | `https://abcdefgh.supabase.co` |
+   | ❌ wrong | `https://abcdefgh.supabase.co/rest/v1/` |
+
+   That second one is the **Data API endpoint**, shown nearby on the same page,
+   and it is easy to grab by mistake. The code appends `/auth/v1` and
+   `/storage/v1` itself, so an extra path produces broken requests. The server
+   now strips it and logs a warning rather than refusing to start, but set it
+   correctly and the warning goes away.
 
 > The secret key grants full database access and ignores all security rules.
 > Server-side only. Never commit it, never put it in frontend code.
@@ -414,6 +427,11 @@ carefully.
 Wrong connection string type. You need **Transaction pooler**, whose username
 looks like `postgres.abcdefghijkl` (with a dot and your project ref), not plain
 `postgres`.
+
+**Deploy fails with `SUPABASE_URL is not a Supabase project URL`**
+You copied the Data API endpoint (ending `/rest/v1/`) rather than the Project
+URL. The message prints exactly what you set and what was expected. Fix it under
+**Environment** in Render; it redeploys automatically.
 
 **Health check says `"driver":"pglite"`**
 `DATABASE_URL` is missing or misspelled in Render. The app silently falls back
