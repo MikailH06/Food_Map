@@ -37,10 +37,20 @@ export const server = {
   port: int('PORT', 3000),
   // Render sets NODE_ENV=production automatically.
   isProduction: env.NODE_ENV === 'production',
-  // Browsers allowed to call this API. Add your Render/production URL here.
-  corsOrigins: (env.CORS_ORIGINS ?? 'http://localhost:3000')
-    .split(',')
-    .map((s) => s.trim())
+  // Browsers allowed to call this API from a DIFFERENT origin.
+  //
+  // Same-origin requests are always permitted regardless of this list — see
+  // corsDelegate() in index.js. This only matters if you want another site to
+  // call your API.
+  //
+  // RENDER_EXTERNAL_URL is injected by Render with the service's real public
+  // URL, so the deployed site is trusted automatically even when CORS_ORIGINS
+  // is stale or was never updated from a placeholder.
+  corsOrigins: [
+    ...(env.CORS_ORIGINS ?? 'http://localhost:3000').split(','),
+    env.RENDER_EXTERNAL_URL ?? '',
+  ]
+    .map((s) => s.trim().replace(/\/+$/, ''))
     .filter(Boolean),
 };
 
